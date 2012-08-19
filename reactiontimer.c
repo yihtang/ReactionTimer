@@ -68,12 +68,6 @@ int main(void)
 			TCCR0A &= ~(1 << COM0B1);
 
 			// activate timer, set to zero
-			/* NOTE: the counting begins after the beep has finished. so
-			 * technically, ~50 ms should be added to the count
-			 */
-			// TODO: figure out an ELEGANT method of starting the count
-			// simultaneously with a timed beep.
-			cli();
 			g_timer = 0;
 			// activate the timer1 (milliseconds) interrupt
 			TIMSK1 |= 1 << OCIE1A;
@@ -90,14 +84,10 @@ int main(void)
 			while (g_timer < 1000) {
 				copy_timer = g_timer;
 				if (g_game_state & (1 << GAME_BUTTON_BIT)) break;
-
-				sei();
 				disp_number(copy_timer, 10);
-				cli();
 			} /*while*/
 
 			/* now the game is over, so reset the game state and stop interrupts */
-			cli();
 			g_game_state &= ~((1 << GAME_BUTTON_BIT) | (1 << ACTIVE_BIT));
 
 			// deactivate the timer1 interrupt and the game button interrupt
