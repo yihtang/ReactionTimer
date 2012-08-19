@@ -63,14 +63,12 @@ int main(void)
 			// NOTE: It turns out the LED flash is too short to be visible
 			PORTD |= 1 << PORTD7;
 			TCCR0A |= (1 << COM0B1);
+			TCNT1 = 0; // reset TCNT at this point
+			TIMSK1 |= 1 << OCIE1A; // activate the timer1 (milliseconds) interrupt
+			g_timer = 0; // begin counting
 			_delay_ms(50);
 			PORTD &= ~(1 << PORTD7);
 			TCCR0A &= ~(1 << COM0B1);
-
-			// activate timer, set to zero
-			g_timer = 0;
-			// activate the timer1 (milliseconds) interrupt
-			TIMSK1 |= 1 << OCIE1A;
 
 			// activate the game button interrupt
 			EIMSK |= 1 << INT0;
