@@ -62,9 +62,23 @@ int main(void)
 			game_button_pressed = 0;
 			PORTD &= ~(1 << PORTD7);		// turn off LED			
 			
+			// stays in the loop forever until button is pressed, or reset is played
+			while (1){
+				
+				if (game_button_pressed == 1){
+					disp_number(TCNT1 / 15.625, 10);
+					break;
+				}
+				else if (game_active == 0){
+					disp_number(1000, 0); // Note: because of 16bit data issue, I choose to show the maximum time instead of the last game time
+					break;
+				}
+				
+			}
+			
 			g_timer = TCNT1 / 15.625; // not sure if this operation is allowed
 			
-				disp_number(g_timer, 10);
+				
 			
 			/* now the game is over, so reset the game state and stop interrupts */\
 			game_button_pressed = 0;
