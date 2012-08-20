@@ -37,8 +37,6 @@ unsigned char game_button_pressed = 0;
 
 int main(void)
 {
-	unsigned int g_timer;
-	
 	// Setup
 	cli();
     setup();
@@ -76,10 +74,6 @@ int main(void)
 				
 			}
 			
-			g_timer = TCNT1 / 15.625; // not sure if this operation is allowed
-			
-				
-			
 			/* now the game is over, so reset the game state and stop interrupts */\
 			game_button_pressed = 0;
 			game_active = 0;
@@ -89,8 +83,6 @@ int main(void)
 			EIMSK &= ~(1 << INT0);
 		}/*if*/
 		
-		// While the game is in standby, display the reaction time from the last game
-		disp_number(g_timer, 10);
 	}
 }
 
