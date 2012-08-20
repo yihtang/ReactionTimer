@@ -26,9 +26,6 @@
  */
 void setup();
 
-/* g_timer is the game timer. It is only used during the main game phase */
-unsigned short g_timer = 0;
-
 /*
  *    game_active: 1 when the game is being played, 0 otherwise
  *    game_button_pressed: 1 if the game button has been pressed, 0 otherwise
@@ -40,6 +37,8 @@ unsigned char game_button_pressed = 0;
 
 int main(void)
 {
+	int g_timer;
+	
 	// Setup
 	cli();
     setup();
@@ -67,7 +66,6 @@ int main(void)
 			// TODO: figure out an ELEGANT method of starting the count
 			// simultaneously with a timed beep.
 			cli();
-			g_timer = 0;
 			// activate the timer1 (milliseconds) interrupt
 			TIMSK1 |= 1 << OCIE1A;
 			
@@ -75,18 +73,9 @@ int main(void)
 			EIMSK |= 1 << INT0;
 			game_button_pressed = 0;
 			
-			// counting loop, stop at 999 or at reset.
-			// TODO: resolve bug where the count stops at ~15 ms without
-			// the game button being pressed
-			// TODO: resolve bug where timer stops at 989 or some other
-			// number, rather than 999
-			while (g_timer < 1000) {
-				if (g_game_state & (1 << GAME_BUTTON_BIT)) break;
-				
-				sei();
+			g_timer = TCNT1 / 15.625; // not sure if this operation is allowed
+			
 				disp_number(g_timer, 10);
-				cli();
-			} /*while*/
 			
 			/* now the game is over, so reset the game state and stop interrupts */
 			cli();
