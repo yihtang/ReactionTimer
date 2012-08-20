@@ -57,15 +57,9 @@ int main(void)
 			// beep and flash LED
 			PORTD |= 1 << PORTD7;
 			_delay_ms(100); // change LED flash to be 0.1s to be visible
+			TCNT1 = 0; // begin TCNT1 calculation from 0 to 15624 which will be one second
 			PORTD &= ~(1 << PORTD7);
 			
-			// activate timer, set to zero
-			/* NOTE: the counting begins after the beep has finished. so
-			 * technically, ~50 ms should be added to the count
-			 */
-			// TODO: figure out an ELEGANT method of starting the count
-			// simultaneously with a timed beep.
-			cli();
 			// activate the timer1 (milliseconds) interrupt
 			TIMSK1 |= 1 << OCIE1A;
 			
@@ -77,8 +71,7 @@ int main(void)
 			
 				disp_number(g_timer, 10);
 			
-			/* now the game is over, so reset the game state and stop interrupts */
-			cli();
+			/* now the game is over, so reset the game state and stop interrupts */\
 			game_button_pressed = 0;
 			game_active = 0;
 			
