@@ -37,7 +37,7 @@ unsigned char game_button_pressed = 0;
 
 int main(void)
 {
-	int g_timer;
+	unsigned int g_timer;
 	
 	// Setup
 	cli();
@@ -54,18 +54,13 @@ int main(void)
 			// TODO: introduce a random delay.
 			_delay_ms(2000);
 			
-			// beep and flash LED
-			PORTD |= 1 << PORTD7;
-			_delay_ms(100); // change LED flash to be 0.1s to be visible
-			TCNT1 = 0; // begin TCNT1 calculation from 0 to 15624 which will be one second
-			PORTD &= ~(1 << PORTD7);
-			
-			// activate the timer1 (milliseconds) interrupt
-			TIMSK1 |= 1 << OCIE1A;
-			
-			// activate the game button interrupt
-			EIMSK |= 1 << INT0;
+			PORTD |= 1 << PORTD7;			// turn on LED
+			_delay_ms(100);					// change LED flash to be 0.1s to be visible
+			TCNT1 = 0;						// begin TCNT1 calculation from 0 to 15624 which will be one second
+			TIMSK1 |= 1 << OCIE1A;			// activate the timer1 (milliseconds) interrupt
+			EIMSK |= 1 << INT0;				// activate the game button interrupt
 			game_button_pressed = 0;
+			PORTD &= ~(1 << PORTD7);		// turn off LED			
 			
 			g_timer = TCNT1 / 15.625; // not sure if this operation is allowed
 			
