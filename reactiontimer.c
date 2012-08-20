@@ -64,6 +64,10 @@ int main(void)
 			while (1){
 				
 				if (game_button_pressed == 1){
+					/* because TCNT1 is interrupt when the game button is pressed, it'll not count to 15624 but somewhere in between.
+					 * thus, read the current value of TCNT1 and divide it by a constant to get time in milliseconds.
+					 * 15624 = 1000 ms, thus 1 ms = 15.625.  If decimals are not allowed in this calculation, then go with 16.
+					 * it'll be a little bit inaccurate, but should not be too big of a deal. Error = 2.3%.	*/
 					disp_number(TCNT1 / 15.625, 10);
 					break;
 				}
@@ -74,7 +78,7 @@ int main(void)
 				
 			}
 			
-			/* now the game is over, so reset the game state and stop interrupts */\
+			/* now the game is over, so reset the game state and stop interrupts */
 			game_button_pressed = 0;
 			game_active = 0;
 			
