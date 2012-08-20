@@ -42,7 +42,6 @@ int main(void)
 {
 	// Setup
 	cli();
-	static unsigned short copy_timer = 0;
     setup();
 	sei();
 	
@@ -51,7 +50,6 @@ int main(void)
 	for (;;) {
 		// if the reset button has been pressed, start the game
 		if (game_active == 1) {
-			copy_timer = 0;
 			
 			// delay, so the user has to anticipate the beep
 			// TODO: introduce a random delay.
@@ -86,11 +84,10 @@ int main(void)
 			// TODO: resolve bug where timer stops at 989 or some other
 			// number, rather than 999
 			while (g_timer < 1000) {
-				copy_timer = g_timer;
 				if (g_game_state & (1 << GAME_BUTTON_BIT)) break;
 				
 				sei();
-				disp_number(copy_timer, 10);
+				disp_number(g_timer, 10);
 				cli();
 			} /*while*/
 			
@@ -105,7 +102,7 @@ int main(void)
 		}/*if*/
 		
 		// While the game is in standby, display the reaction time from the last game
-		disp_number(copy_timer, 10);
+		disp_number(g_timer, 10);
 	}
 }
 
