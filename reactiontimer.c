@@ -63,6 +63,12 @@ int main(void)
 			// stays in the loop forever until button is pressed, or reset is played
 			while (1){
 				
+				if (game_button_pressed == 1 || game_active == 0){
+					// deactivate the timer1 interrupt and the game button interrupt to prevent further interruptions when displaying on LCD
+					TIMSK1 &= ~(1 << OCIE1A);
+					EIMSK &= ~(1 << INT0);
+				}
+				
 				if (game_button_pressed == 1){
 					/* because TCNT1 is interrupt when the game button is pressed, it'll not count to 15624 but somewhere in between.
 					 * thus, read the current value of TCNT1 and divide it by a constant to get time in milliseconds.
@@ -82,12 +88,10 @@ int main(void)
 			game_button_pressed = 0;
 			game_active = 0;
 			
-			// deactivate the timer1 interrupt and the game button interrupt
-			TIMSK1 &= ~(1 << OCIE1A);
-			EIMSK &= ~(1 << INT0);
+			
 		}/*if*/
 		
-	}
+	} // end of for loop
 }
 
 /****************************FUNCTION DEFINITIONS******************************/
