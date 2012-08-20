@@ -118,11 +118,15 @@ void setup(){
 	// set up the seven segment display
 	setup_sevenseg();
 	
-	/* set up Timer1 to count milliseconds. */
+	/* set up Timer1 to count TCNT1 from 0 to 15624, which will take 1 second. 
+	 * after 1 second, the OCF1A flag will be set, and we can reset the game play in the ISR */
 	TCCR1A &= 0;
-	TCCR1B |= (1 << WGM12) | (1 << CS10);
-	TCCR1B &= ~((1 << WGM13) | (1 << CS12) | (1 << CS11));
-	OCR1A = 16000;
+	TCCR1B |= (1 << WGM12) | (1 << CS10) | (1 << CS12); // CS12:10 = 101 - prescaler 1024
+	TCCR1B &= ~((1 << WGM13) | (1 << CS11)); // WGM13:10 = 0100 - CTC mode, output compare OCR1A
+	
+	// determined from using the formula [desired_time_in_sec * (clock_speed_in_Hz / prescaler) - 1]
+	// in this case it would be 1s * 16000000 / 1024 - 1 = 15624
+	OCR1A = 15624; 
 	
 	// set up the led
 	DDRD |= DDD6;
