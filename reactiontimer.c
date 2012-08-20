@@ -121,24 +121,6 @@ void setup(){
 	// set up the seven segment display
 	setup_sevenseg();
 	
-	/* set up the beeper for fast pwm @ ~850 Hz, 50% duty cycle. (pinD5, OC0B)*/
-	// enable digital output on the specified pin
-	DDRD |= 1 << DDB5;
-	
-	// ensure that the OC0B is currently disconnected from the pin
-	TCCR0A &= ~((1 << COM0A1) | (1 << COM0A0) | (1 << COM0B1) | (1 << COM0B0));
-	
-	// specify waveform generation mode to fast PWM with TOP == 0xFF
-	TCCR0A |= (1 << WGM01) | (1 << WGM00);
-	TCCR0B &= ~(1 << WGM02);
-	
-	// set the clock prescaler
-	TCCR0B |= (1 << CS01) | (1 << CS00);
-	TCCR0B &= ~(1 << CS02);
-	
-	// set the duty cycle to 50%
-	OCR0B = 127;
-	
 	/* set up Timer1 to count milliseconds. */
 	TCCR1A &= 0;
 	TCCR1B |= (1 << WGM12) | (1 << CS10);
