@@ -56,12 +56,9 @@ int main(void)
 			_delay_ms(2000);
 			
 			// beep and flash LED
-			// NOTE: It turns out the LED flash is too short to be visible
 			PORTD |= 1 << PORTD7;
-			TCCR0A |= (1 << COM0B1);
-			_delay_ms(50);
+			_delay_ms(100); // change LED flash to be 0.1s to be visible
 			PORTD &= ~(1 << PORTD7);
-			TCCR0A &= ~(1 << COM0B1);
 			
 			// activate timer, set to zero
 			/* NOTE: the counting begins after the beep has finished. so
