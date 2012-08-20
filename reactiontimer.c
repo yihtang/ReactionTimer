@@ -15,9 +15,6 @@
 #include "sevensegwithshifter.h"
 #include <util/delay.h>
 
-/******************************MACRO DEFINITIONS*******************************/
-#define ACTIVE_BIT 0
-#define GAME_BUTTON_BIT 1
 
 /******************FUNCTION AND GLOBAL VARIABLE DECLARATIONS*******************/
 
@@ -32,12 +29,13 @@ void setup();
 /* g_timer is the game timer. It is only used during the main game phase */
 unsigned short g_timer = 0;
 
-/* g_game_state is a bit field tracking the events of the game. 
- * bit descriptions:
- *    ACTIVE_BIT: 1 when the game is being played, 0 otherwise
- *    GAME_BUTTON_BIT: 1 if the game button has been pressed, 0 otherwise
+/*
+ *    game_active: 1 when the game is being played, 0 otherwise
+ *    game_button_pressed: 1 if the game button has been pressed, 0 otherwise
  */
-unsigned char g_game_state = 0;
+unsigned char game_active = 0;
+unsigned char game_button_pressed = 0;
+
 /*******************************MAIN FUNCTIONS*********************************/
 
 int main(void)
@@ -52,7 +50,7 @@ int main(void)
 	// Loop
 	for (;;) {
 		// if the reset button has been pressed, start the game
-		if (g_game_state & (1 << ACTIVE_BIT)) {
+		if (game_active == 1) {
 			copy_timer = 0;
 			
 			// delay, so the user has to anticipate the beep
@@ -80,7 +78,7 @@ int main(void)
 			
 			// activate the game button interrupt
 			EIMSK |= 1 << INT0;
-			g_game_state &= ~(1 << GAME_BUTTON_BIT);
+			game_button_pressed = 0;
 			
 			// counting loop, stop at 999 or at reset.
 			// TODO: resolve bug where the count stops at ~15 ms without
@@ -98,7 +96,8 @@ int main(void)
 			
 			/* now the game is over, so reset the game state and stop interrupts */
 			cli();
-			g_game_state &= ~((1 << GAME_BUTTON_BIT) | (1 << ACTIVE_BIT));
+			game_button_pressed = 0;
+			game_active = 0;
 			
 			// deactivate the timer1 interrupt and the game button interrupt
 			TIMSK1 &= ~(1 << OCIE1A);
@@ -170,10 +169,10 @@ ISR(TIMER1_COMPA_vect)
 // Reset button
 ISR(INT1_vect)
 {
-	g_game_state |= 1 << ACTIVE_BIT;
+	game_active = 1;
 }	
 //the game button
 ISR(INT0_vect)
 {
-	g_game_state |= 1 << GAME_BUTTON_BIT;
+	game_button_pressed = 1;
 }
