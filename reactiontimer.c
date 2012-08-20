@@ -146,7 +146,7 @@ void setup(){
 /***************************INTERRUPT SUBROUTINES******************************/
 ISR(TIMER1_COMPA_vect)
 {
-	g_timer++;
+	game_active = 0; // game goes into reset after 1 second, which is when the OCIE1A flag is set
 }
 
 // Reset button
