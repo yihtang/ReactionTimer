@@ -7,6 +7,9 @@
  * of gameplay and electronics.
  */
 
+#define F_CPU 16000000
+#define MAX_COUNT ((F_CPU)/ 1024 - 1) // the value that TCNT1 that leads to a 1s delay
+
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include <stdlib.h>
@@ -40,6 +43,7 @@ int main(void)
 	// Setup
 	cli();
     setup();
+    unsigned short last_game_count = 999;
 	sei();
 
 	// TODO: allow a reset from anywhere in the game loop
@@ -50,16 +54,18 @@ int main(void)
 
 			// delay, so the user has to anticipate the beep
 			// TODO: introduce a random delay.
-			_delay_ms(2000);
+		    // FIXED BUG: without the cli() and sei(), the player could press the game button
+            // before the delay was done.
+       		cli();
+            _delay_ms(2000);
+
 
 			PORTD |= 1 << PORTD7;			// turn on LED
-			_delay_ms(100);					// change LED flash to be 0.1s to be visible
-			TCNT1 = 0;						// begin TCNT1 calculation from 0 to 15624 which will be one second
-			TIMSK1 |= 1 << OCIE1A;			// activate the timer1 (milliseconds) interrupt
-			EIMSK |= 1 << INT0;				// activate the game button interrupt
-			game_button_pressed = 0;
-			PORTD &= ~(1 << PORTD7);		// turn off LED
-
+            TCNT1 = 0;						// begin TCNT1 calculation from 0 to 15624 which will be one second
+            TIMSK1 |= 1 << OCIE1A;			// activate the timer1 interrupt
+            TCCR1B |= ((1 << CS10) | (1 << CS12)); // reactivate timer
+            EIMSK |= 1 << INT0;				// activate the game button interrupt
+			sei();
 			// stays in the loop forever until button is pressed, or reset is played
 			while (1){
 
@@ -68,33 +74,34 @@ int main(void)
 					TIMSK1 &= ~(1 << OCIE1A);
 					EIMSK &= ~(1 << INT0);
 
-					// moved this if statement to ensure interrupt doesn't occur between them that will cause infinite ISR call
-					if (game_button_pressed == 1){
-                        /* because TCNT1 is interrupt when the game button is pressed, it'll not count to 15624 but somewhere in between.
-                         * thus, read the current value of TCNT1 and divide it by a constant to get time in milliseconds.
-                         * 15624 = 1000 ms, thus 1 ms = 15.625.  If decimals are not allowed in this calculation, then go with 16.
-                         * it'll be a little bit inaccurate, but should not be too big of a deal. Error = 2.3%.	*/
-                        disp_number(TCNT1 / 15.625, 10);
-                        break;
-                    }
-                    else if (game_active == 0){
-                        disp_number(1000, 0); // Note: because of 16bit data issue, I choose to show the maximum time instead of the last game time
-                        break;
-                    }
-				}
+                    // deactivate timer1
+                    TCCR1B &= ~((1 << CS10) | (1 << CS12));
 
+                    PORTD &= ~(1 << PORTD7);		// turn off LED
 
-
+				    if (game_button_pressed == 1){
+					    /* because TCNT1 is interrupt when the game button is pressed, it'll not count to 15624 but somewhere in between.
+					     * thus, read the current value of TCNT1 and divide it by a constant to get time in milliseconds.
+					     * 15624 = 1000 ms, thus 1 ms = 15.625.  If decimals are not allowed in this calculation, then go with 16.
+					     * it'll be a little bit inaccurate, but should not be too big of a deal. Error = 2.3%.*/
+					    last_game_count = TCNT1 / 15.625, 10;
+					    break;
+				    }
+				     else if (game_active == 0){
+					    last_game_count = 999;
+					    break;
+				    }
+                }
 			}
 
 			/* now the game is over, so reset the game state and stop interrupts */
 			game_button_pressed = 0;
 			game_active = 0;
 
-
 		}/*if*/
 
-	} // end of for loop
+        disp_number(last_game_count, 10); // displays the last reaction time
+	} /*for*/
 }
 
 /****************************FUNCTION DEFINITIONS******************************/
@@ -110,16 +117,19 @@ void setup(){
 	setup_sevenseg();
 
 	/* set up Timer1 to count TCNT1 from 0 to 15624, which will take 1 second.
-	 * after 1 second, the OCF1A flag will be set, and we can reset the game play in the ISR */
-	TCCR1A &= 0;
-	TCCR1B |= (1 << WGM12) | (1 << CS10) | (1 << CS12); // CS12:10 = 101 - prescaler 1024
-	TCCR1B &= ~((1 << WGM13) | (1 << CS11)); // WGM13:10 = 0100 - CTC mode, output compare OCR1A
+	 * after 1 second, the OCIE1A flag will be set, and we can reset the game play in the ISR */
+
+    // WGM13:10 = 0100 - CTC mode, output compare OCR1A
+    // both clock select bits off, until the timer is needed.
+    TCCR1A &= 0;
+    TCCR1B |= (1 << WGM12);
+	TCCR1B &= ~((1 << WGM13));
 
 	// determined from using the formula [desired_time_in_sec * (clock_speed_in_Hz / prescaler) - 1]
-	// in this case it would be 1s * 16000000 / 1024 - 1 = 15624
-	OCR1A = 15624;
+	// in this case it would be
+	OCR1A = (unsigned short) MAX_COUNT;
 
-	// set up the led
+    // set up the led
 	DDRD |= DDD6;
 	PORTD &= ~(1 << PORTD6);
 
