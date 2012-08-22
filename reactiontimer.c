@@ -52,6 +52,7 @@ int main(void)
 		// if the reset button has been pressed, start the game
 		if (game_active == 1) {
 
+			last_game_count = 0;
 			// delay, so the user has to anticipate the beep
 			// TODO: introduce a random delay.
 		    // FIXED BUG: without the cli() and sei(), the player could press the game button
@@ -67,6 +68,8 @@ int main(void)
             EIMSK |= 1 << INT0;				// activate the game button interrupt
 			// sei(); COMMENT: I removed this sei() statement, because I added an IF statement in ISR(INT0)
 			game_active = 2; // go into state where LED blinks off
+			
+			
 		}
 		
 		else if (game_active == 2 && game_button_pressed == 1){
