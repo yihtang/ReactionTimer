@@ -30,11 +30,12 @@
 void setup();
 
 /*
- *    game_active: 1 when the game is being played, 0 otherwise
+ *    game_active: 1 when the game just started, 0 otherwise, 2 when the LED lights off
  *    game_button_pressed: 1 if the game button has been pressed, 0 otherwise
  */
 unsigned char game_active = 0;
 unsigned char game_button_pressed = 0;
+unsigned short last_game_count = 0;
 
 /*******************************MAIN FUNCTIONS*********************************/
 
@@ -42,8 +43,7 @@ int main(void)
 {
 	// Setup
 	cli();
-    setup();
-    unsigned short last_game_count = 999;
+    setup();    
 	sei();
 
 	// TODO: allow a reset from anywhere in the game loop
@@ -56,7 +56,7 @@ int main(void)
 			// TODO: introduce a random delay.
 		    // FIXED BUG: without the cli() and sei(), the player could press the game button
             // before the delay was done.
-       		cli();
+       		// cli(); COMMENT: I removed this cli() statement, because I added an IF statement in ISR(INT0)
             _delay_ms(2000);
 
 
@@ -65,34 +65,25 @@ int main(void)
             TIMSK1 |= 1 << OCIE1A;			// activate the timer1 interrupt
             TCCR1B |= ((1 << CS10) | (1 << CS12)); // reactivate timer
             EIMSK |= 1 << INT0;				// activate the game button interrupt
-			sei();
-			// stays in the loop forever until button is pressed, or reset is played
-			while (1){
+			// sei(); COMMENT: I removed this sei() statement, because I added an IF statement in ISR(INT0)
+			game_active = 2; // go into state where LED blinks off
+		}
+		
+		else if (game_active == 2 && game_button_pressed == 1){
+			// deactivate the timer1 interrupt and the game button interrupt to prevent further interruptions when displaying on LCD
+			TIMSK1 &= ~(1 << OCIE1A);
+			EIMSK &= ~(1 << INT0);
 
-				if (game_button_pressed == 1 || game_active == 0){
-					// deactivate the timer1 interrupt and the game button interrupt to prevent further interruptions when displaying on LCD
-					TIMSK1 &= ~(1 << OCIE1A);
-					EIMSK &= ~(1 << INT0);
+            // deactivate timer1: Edit, I completely disable them using 000 in CS12:10
+            TCCR1B &= ~((1 << CS10) | (1 << CS11) | (1 <<CS12));
 
-                    // deactivate timer1
-                    TCCR1B &= ~((1 << CS10) | (1 << CS12));
+            PORTD &= ~(1 << PORTD7);		// turn off LED
 
-                    PORTD &= ~(1 << PORTD7);		// turn off LED
-
-				    if (game_button_pressed == 1){
-					    /* because TCNT1 is interrupt when the game button is pressed, it'll not count to 15624 but somewhere in between.
-					     * thus, read the current value of TCNT1 and divide it by a constant to get time in milliseconds.
-					     * 15624 = 1000 ms, thus 1 ms = 15.625.  If decimals are not allowed in this calculation, then go with 16.
-					     * it'll be a little bit inaccurate, but should not be too big of a deal. Error = 2.3%.*/
-					    last_game_count = TCNT1 / 15.625, 10;
-					    break;
-				    }
-				     else if (game_active == 0){
-					    last_game_count = 999;
-					    break;
-				    }
-                }
-			}
+			/* because TCNT1 is interrupt when the game button is pressed, it'll not count to 15624 but somewhere in between.
+			* thus, read the current value of TCNT1 and divide it by a constant to get time in milliseconds.
+			* 15624 = 1000 ms, thus 1 ms = 15.625.  If decimals are not allowed in this calculation, then go with 16.
+			* it'll be a little bit inaccurate, but should not be too big of a deal. Error = 2.3%.*/
+			last_game_count = TCNT1 / (MAX_COUNT/1000);
 
 			/* now the game is over, so reset the game state and stop interrupts */
 			game_button_pressed = 0;
@@ -147,16 +138,28 @@ void setup(){
 /***************************INTERRUPT SUBROUTINES******************************/
 ISR(TIMER1_COMPA_vect)
 {
-	game_active = 0; // game goes into reset after 1 second, which is when the OCIE1A flag is set
+	if (game_active == 2)
+	{
+		game_active = 0; // game goes into reset after 1 second, which is when the OCIE1A flag is set
+		last_game_count = 999; // when game ends
+		
+		// disable interrupts and stop timer after game goes into reset after 1s
+		TIMSK1 &= ~(1 << OCIE1A);
+		EIMSK &= ~(1 << INT0);
+		TCCR1B &= ~((1 << CS10) | (1 << CS11) | (1 <<CS12));
+	}	
 }
 
 // Reset button
 ISR(INT1_vect)
 {
-	game_active = 1;
+	/* comment off this IF statement, if you want to allow RESET from anywhere */
+	if (game_active == 0) // only allows restarting the game when game is inactive
+		game_active = 1;
 }
 //the game button
 ISR(INT0_vect)
 {
-	game_button_pressed = 1;
+	if (game_active == 2) // button press is only valid when game is active
+		game_button_pressed = 1;
 }
