@@ -9,6 +9,7 @@
 
 #define F_CPU 16000000
 #define MAX_COUNT ((F_CPU)/ 1024 - 1) // the value that TCNT1 that leads to a 1s delay
+#define DEBOUNCE_DELAY_MS 1
 
 #include <avr/interrupt.h>
 #include <avr/io.h>
@@ -33,9 +34,9 @@ void setup();
  *    game_active: 1 when the game just started, 0 otherwise, 2 when the LED lights off
  *    game_button_pressed: 1 if the game button has been pressed, 0 otherwise
  */
-unsigned char game_active = 0;
-unsigned char game_button_pressed = 0;
-unsigned short last_game_count = 0;
+volatile unsigned char game_active = 0;
+volatile unsigned char game_button_pressed = 0;
+volatile unsigned short last_game_count = 999;
 
 /*******************************MAIN FUNCTIONS*********************************/
 
@@ -46,7 +47,6 @@ int main(void)
     setup();    
 	sei();
 
-	// TODO: allow a reset from anywhere in the game loop
 	// Loop
 	for (;;) {
 		// if the reset button has been pressed, start the game
@@ -55,9 +55,6 @@ int main(void)
 			last_game_count = 0;
 			// delay, so the user has to anticipate the beep
 			// TODO: introduce a random delay.
-		    // FIXED BUG: without the cli() and sei(), the player could press the game button
-            // before the delay was done.
-       		// cli(); COMMENT: I removed this cli() statement, because I added an IF statement in ISR(INT0)
             _delay_ms(2000);
 
 
@@ -65,10 +62,13 @@ int main(void)
             TCNT1 = 0;						// begin TCNT1 calculation from 0 to 15624 which will be one second
             TIMSK1 |= 1 << OCIE1A;			// activate the timer1 interrupt
             TCCR1B |= ((1 << CS10) | (1 << CS12)); // reactivate timer
+            
+            // Clearing the external interrupt flags (by writing 1 to them; see data sheet)
+            // The flags get set regardless of whether interrupts are enabled or not, so we must make sure
+            // they are off before enabling the interrupts
+            EIFR |= (1 << INTF1) | (1 << INTF0);
             EIMSK |= 1 << INT0;				// activate the game button interrupt
-			// sei(); COMMENT: I removed this sei() statement, because I added an IF statement in ISR(INT0)
-			game_active = 2; // go into state where LED blinks off
-			
+			game_active = 2; // move into the main game stage
 			
 		}
 		
@@ -82,19 +82,16 @@ int main(void)
 
             PORTD &= ~(1 << PORTD7);		// turn off LED
 
-			/* because TCNT1 is interrupt when the game button is pressed, it'll not count to 15624 but somewhere in between.
-			* thus, read the current value of TCNT1 and divide it by a constant to get time in milliseconds.
-			* 15624 = 1000 ms, thus 1 ms = 15.625.  If decimals are not allowed in this calculation, then go with 16.
-			* it'll be a little bit inaccurate, but should not be too big of a deal. Error = 2.3%.*/
-			last_game_count = TCNT1 / (MAX_COUNT/1000);
+			// calculate the time passed since the beginning of the game
+            // note the 2 ms offset, added due to the 2 ms debouncing wait in the INT0 ISR
+			last_game_count = (TCNT1 - DEBOUNCE_DELAY_MS) / (MAX_COUNT/1000);
 
 			/* now the game is over, so reset the game state and stop interrupts */
 			game_button_pressed = 0;
 			game_active = 0;
 
 		}/*if*/
-
-        disp_number(last_game_count, 10); // displays the last reaction time
+        else if (game_active == 0) disp_number(last_game_count, 10); // displays the last reaction time
 	} /*for*/
 }
 
@@ -150,19 +147,25 @@ ISR(TIMER1_COMPA_vect)
 		TIMSK1 &= ~(1 << OCIE1A);
 		EIMSK &= ~(1 << INT0);
 		TCCR1B &= ~((1 << CS10) | (1 << CS11) | (1 <<CS12));
+        PORTD &= ~(1 << PORTD7);		// turn off LED
+        
 	}	
 }
 
 // Reset button
 ISR(INT1_vect)
 {
-	/* comment off this IF statement, if you want to allow RESET from anywhere */
-	if (game_active == 0) // only allows restarting the game when game is inactive
+   // delay, in order to ignore switch bounce noise
+    _delay_ms(DEBOUNCE_DELAY_MS);
+	// only reset if the game is idle and the game button is still high.
+    if (game_active == 0 && (PIND & (1 << PIND3)))
 		game_active = 1;
 }
 //the game button
 ISR(INT0_vect)
 {
-	if (game_active == 2) // button press is only valid when game is active
+	// delay, in order to ignore switch bounce noise
+    _delay_ms(DEBOUNCE_DELAY_MS);
+    if (game_active == 2 && (PIND & (1 << PIND2))) // button press is only valid when game is active
 		game_button_pressed = 1;
 }
