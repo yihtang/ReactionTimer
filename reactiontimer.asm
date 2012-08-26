@@ -20,6 +20,15 @@
 .EQU LCD_RW = 1		; define shift for Read/Write
 .EQU LCD_EN = 2		; define shift for Enable bit
 
+.EQU GAME_ACTIVE = R22
+.EQU GAME_BUTTON_PRESSED = R23
+.EQU GAME_RESULT_H = R24
+.EQU GAME_RESULT_L = R25
+
+.EQU F_CPU = 16000000
+.EQU PRESCALE = 1024
+.EQU MAX_COUNT = ((F_CPU)/ PRESCALE - 1) // the value that TCNT1 that leads to a 1s delay
+
 ; macro: simplifies the command writing to LCD. Delay 2ms after every command.
 .MACRO WRITE_CMD
 	LDI R16, @0
@@ -31,6 +40,12 @@
 .MACRO WRITE_DATA
 	LDI R16, @0
 	CALL LCD_WRITE_DATA
+.ENDMACRO
+
+; macro: simplifies to load I/O process, using R18 as temporary register
+.MACRO LOADIO
+	LDI R18, @1
+	OUT @0, R18
 .ENDMACRO
 
 ; --- Interrupt jump ---
@@ -53,7 +68,7 @@ MAIN:
 	LDI R21, LOW(RAMEND)
 	OUT SPL, R21
 
-	; set command and data ports to output
+	; set command and data ports to output for LCD
 	LDI R21, 0xFF
 	OUT LCD_DataDDR, R21
 	OUT LCD_CmdDDR, R21
@@ -65,6 +80,18 @@ MAIN:
 	WRITE_CMD 0x0E			; command to turn display on, cursor on
 	WRITE_CMD 0x01			; command to clear LCD screen	
 	WRITE_CMD 0x06			; command to shift cursor right
+
+	CLI						; clear interrupts
+	; setup the game
+	LDI GAME_ACTIVE, 0
+	LDI GAME_BUTTON_PRESSED, 0
+	LDI GAME_RESULT_H, HIGH(999)
+	LDI GAME_RESULT_L, LOW(999)
+	
+
+
+
+
 
 ; --- functions body below ---
 
