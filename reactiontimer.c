@@ -8,7 +8,8 @@
  */
 
 #define F_CPU 16000000
-#define MAX_COUNT ((F_CPU)/ 1024 - 1) // the value that TCNT1 that leads to a 1s delay
+#define PRESCALE 1024
+#define MAX_COUNT ((F_CPU)/ PRESCALE - 1) // the value that TCNT1 that leads to a 1s delay
 #define DEBOUNCE_DELAY_MS 1
 
 #include <avr/interrupt.h>
@@ -31,7 +32,8 @@
 void setup();
 
 /*
- *    game_active: 1 when the game just started, 0 otherwise, 2 when the LED lights off
+ *    game_active: 0 when the game hasn't started and is in idle, 
+ *	               1 when the game just started, 2 when the LED lights are turned on
  *    game_button_pressed: 1 if the game button has been pressed, 0 otherwise
  */
 volatile unsigned char game_active = 0;
@@ -48,27 +50,29 @@ int main(void)
 	sei();
 
 	// Loop
-	for (;;) {
+	while(1) {
 		// if the reset button has been pressed, start the game
 		if (game_active == 1) {
-
+			
+			// reset game count
 			last_game_count = 0;
+			
 			// delay, so the user has to anticipate the beep
 			// TODO: introduce a random delay.
             _delay_ms(2000);
 
 
-			PORTD |= 1 << PORTD7;			// turn on LED
-            TCNT1 = 0;						// begin TCNT1 calculation from 0 to 15624 which will be one second
-            TIMSK1 |= 1 << OCIE1A;			// activate the timer1 interrupt
-            TCCR1B |= ((1 << CS10) | (1 << CS12)); // reactivate timer
+			PORTD |= 1 << PORTD7;					// turn on LED
+            TCNT1 = 0;								// begin TCNT1 calculation from 0 to 15624 which will be one second
+            TIMSK1 |= 1 << OCIE1A;					// activate the timer1 interrupt
+            TCCR1B |= ((1 << CS10) | (1 << CS12));	// reactivate timer
             
             // Clearing the external interrupt flags (by writing 1 to them; see data sheet)
             // The flags get set regardless of whether interrupts are enabled or not, so we must make sure
             // they are off before enabling the interrupts
             EIFR |= (1 << INTF1) | (1 << INTF0);
-            EIMSK |= 1 << INT0;				// activate the game button interrupt
-			game_active = 2; // move into the main game stage
+            EIMSK |= 1 << INT0;					// activate the game button interrupt
+			game_active = 2;					// move into the main game stage
 			
 		}
 		
@@ -92,7 +96,7 @@ int main(void)
 
 		}/*if*/
         else if (game_active == 0) disp_number(last_game_count, 10); // displays the last reaction time
-	} /*for*/
+	} /*while*/
 }
 
 /****************************FUNCTION DEFINITIONS******************************/
@@ -115,9 +119,8 @@ void setup(){
     TCCR1A &= 0;
     TCCR1B |= (1 << WGM12);
 	TCCR1B &= ~((1 << WGM13));
-
-	// determined from using the formula [desired_time_in_sec * (clock_speed_in_Hz / prescaler) - 1]
-	// in this case it would be
+	
+	// set TOP as compare match with OCR1A
 	OCR1A = (unsigned short) MAX_COUNT;
 
     // set up the led
@@ -157,6 +160,7 @@ ISR(INT1_vect)
 {
    // delay, in order to ignore switch bounce noise
     _delay_ms(DEBOUNCE_DELAY_MS);
+	
 	// only reset if the game is idle and the game button is still high.
     if (game_active == 0 && (PIND & (1 << PIND3)))
 		game_active = 1;
@@ -166,6 +170,7 @@ ISR(INT0_vect)
 {
 	// delay, in order to ignore switch bounce noise
     _delay_ms(DEBOUNCE_DELAY_MS);
+	
     if (game_active == 2 && (PIND & (1 << PIND2))) // button press is only valid when game is active
 		game_button_pressed = 1;
 }
