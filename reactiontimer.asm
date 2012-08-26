@@ -4,7 +4,11 @@
 ; LCD: 5x7 instead of 7 segment display
 ; Date: 26 August 2012
 
+; NOTE: R16 register is reserved for command and data sending for LCD. Be careful when using this register.
+
 ; --- constant macros ---
+; LCD takes up PORTA0-7 for 8bit data
+; LCD takes up PORTB0-2 for RS, R/W, EN
 
 .EQU LCD_DataPort = PORTA
 .EQU LCD_DataDDR = DDRA
@@ -73,11 +77,60 @@ EXT_INT1_ISR:
 TIMER1_COMPA_ISR: 
 	RETI
 
-DELAY_2MS:
+; --- delay routines for LCD ---
+; 16 MHz MCU - each tick is 0.0625 us
+
+DELAY_1US:
+	PUSH R17
+	LDI R17, 4	
+	LOOP1US:	NOP				; waste 1 clock cycle for delay
+				DEC R17			; decrement for it to become 0
+				BRNE LOOP1US	; skip this statement once R17 becomes 0
+	POP R17
 	RET
 
+	; calculation: 
+	; 3 times will go through NOP, DEC, BRNE which sum up to 4 clock cycles
+	; 1 time will go through NOP, DEC which sum up to 3 clock cycles
+	; RET takes 4 clock cycles
+	; TOTAL: 19 clock cycles - 1.2 us (not that accurate but ok)
+
+DELAY_100US:
+	PUSH R17
+	LDI R17, 100
+	LOOP100US:	CALL DELAY_1US
+				DEC R17
+				BRNE LOOP100US
+	POP R17
+	RET
+
+DELAY_2MS:
+	PUSH R17
+	LDI R17, 20
+	LOOP2MS:	CALL DELAY_100US
+				DEC R17
+				BRNE LOOP2MS
+	POP R17
+	RET
+
+; --- LCD routines ---
+
 LCD_WRITE_CMD:
+	OUT LCD_DataPort, R16
+	CBI LCD_CmdPort, LCD_RS		; RS = 0 for command
+	CBI LCD_CmdPort, LCD_RW		; RW = 0 for writing
+	SBI LCD_CmdPort, LCD_EN		; EN = 1 to generate high pulse
+	CALL DELAY_1US
+	CBI LCD_CmdPort, LCD_EN		; EN = 1 to generate low pulse
+	CALL DELAY_100US
 	RET
 
 LCD_WRITE_DATA:
+	OUT LCD_DataPort, R16
+	SBI LCD_CmdPort, LCD_RS		; RS = 1 for data
+	CBI LCD_CmdPort, LCD_RW		; RW = 0 for writing
+	SBI LCD_CmdPort, LCD_EN		; EN = 1 to generate high pulse
+	CALL DELAY_1US
+	CBI LCD_CmdPort, LCD_EN		; EN = 1 to generate low pulse
+	CALL DELAY_100US
 	RET
