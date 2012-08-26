@@ -24,14 +24,18 @@
 .EQU LCD_RW = 1		; define shift for Read/Write
 .EQU LCD_EN = 2		; define shift for Enable bit
 
-.EQU GAME_ACTIVE = R22
-.EQU GAME_BUTTON_PRESSED = R23
-.EQU GAME_RESULT_H = R24
-.EQU GAME_RESULT_L = R25
+.DEF GAME_ACTIVE = R22
+.DEF GAME_BUTTON_PRESSED = R23
+.DEF GAME_RESULT_H = R24
+.DEF GAME_RESULT_L = R25
+
+.DEF NUM_TO_BE_DIV = R26
+.DEF DENOMINATOR = R27
+.DEF QUOTIENT = R28
 
 .EQU F_CPU = 16000000
 .EQU PRESCALE = 1024
-.EQU MAX_COUNT = ((F_CPU)/ PRESCALE - 1) // the value that TCNT1 that leads to a 1s delay
+.EQU MAX_COUNT = 15625	; the value that TCNT1 that leads to a 1s delay
 
 ; macro: simplifies the command writing to LCD. Delay 2ms after every command.
 .MACRO WRITE_CMD
@@ -42,7 +46,7 @@
 
 ; macro: simplifies the data writing to LCD.
 .MACRO WRITE_DATA
-	LDI R16, @0
+	MOV R16, @0
 	CALL LCD_WRITE_DATA
 .ENDMACRO
 
@@ -297,5 +301,203 @@ LCD_WRITE_DATA:
 	RET
 
 PRINTRESULT_LCD:
+	
+	; NOTE: This function only works for 3 digits integer.  It converts int into array of characters to print on LCD
+
+	WRITE_CMD 0x01							; command to clear LCD screen
+	PUSH R17
+	PUSH R18
+	PUSH R19
+
+	; first digit filter first ---
+	; 900: 0011 1000 0100
+	; 800: 0011 0010 0000
+	; 700: 0010 1011 1100
+	; 600: 0010 0101 1000
+	; 500: 0001 1111 0100
+	; 400: 0001 1001 0000
+	; 300: 0001 0010 1100
+	; 200: 0000 1100 1000
+	; 100: 0000 0110 0100
+	MOV R17, GAME_RESULT_H
+	MOV R18, GAME_RESULT_L
+
+	FILTER_9:
+		; check for 0011 on H first
+		SEZ
+		CPI R17, 3
+		BRNE FILTER_7				; if Z = 0 (not equal to 3) go to check for 0010 at FILTER_7
+		CLZ							; Z = 0 because we want to check for Z = 1
+		SEC							; C = 1 because we want to check for C = 0
+		CPI R18, 0b10000100
+		BREQ PRINT_9				; if equal, print 9
+		BRSH PRINT_9				; if larger, also print 9
+		RJMP FILTER_8
+	PRINT_9:
+		WRITE_DATA '9'
+		SUBI R18, 132				; 0b10000100
+		JMP END_OF_FILTER
+
+	FILTER_8:
+		CLZ
+		SEC
+		CPI R18, 0b00100000
+		BREQ PRINT_8
+		BRSH PRINT_8
+		RJMP FILTER_7
+	PRINT_8:
+		WRITE_DATA '8'
+		SUBI R18, 32				; 0b0010000
+		JMP END_OF_FILTER
+
+	FILTER_7:
+		; at this point, if it's still 0011, it must be 7 already
+		CLZ
+		CPI R17, 3
+		BREQ PRINT_7H				; if Z = 1 (equal), print 7
+		SEZ
+		CPI R17, 2
+		BRNE FILTER_5				; if Z = 0 (not equal to 2), go to FILTER_5 to check for 0001
+		CLZ
+		SEC
+		CPI R18, 0b10111100
+		BREQ PRINT_7L
+		BRSH PRINT_7L
+		RJMP FILTER_6
+	PRINT_7H:
+		WRITE_DATA '7'
+		LDI R19, 100
+		ADD R18, R19
+		SUBI R18, 32
+		JMP END_OF_FILTER
+	PRINT_7L:
+		WRITE_DATA '7'
+		SUBI R18, 188
+		JMP END_OF_FILTER
+
+	FILTER_6:
+		CLZ
+		SEC
+		CPI R18, 0b01011000
+		BREQ PRINT_6
+		BRSH PRINT_6
+		RJMP FILTER_5
+	PRINT_6:
+		WRITE_DATA '6'
+		SUBI R18, 88
+		JMP END_OF_FILTER
+		
+	FILTER_5:
+		; at this point, if it's still 0010, it must be 5 already
+		CLZ
+		CPI R17, 2
+		BREQ PRINT_5H			; if Z = 1 (equal), print 5
+		SEZ
+		CPI R17, 1
+		BRNE FILTER_2			; if Z = 0 (not equal to 2), go to FILTER_2 to check for 0000
+		CLZ
+		SEC
+		CPI R18, 0b11110100
+		BREQ PRINT_5L
+		BRSH PRINT_5L
+		RJMP FILTER_4
+	PRINT_5H:
+		WRITE_DATA '5'
+		LDI R19, 100
+		ADD R18, R19
+		SUBI R18, 88
+		JMP END_OF_FILTER
+	PRINT_5L:
+		WRITE_DATA '5'
+		SUBI R18, 244
+		JMP END_OF_FILTER
+
+	FILTER_4:
+		CLZ
+		SEC
+		CPI R18, 0b10010000
+		BREQ PRINT_4
+		BRSH PRINT_4
+		RJMP FILTER_3
+	PRINT_4:
+		WRITE_DATA '4'
+		SUBI R18, 144
+		RJMP END_OF_FILTER
+
+	FILTER_3:
+		CLZ
+		SEC
+		CPI R18, 0b00101100
+		BREQ PRINT_3
+		BRSH PRINT_3
+		RJMP FILTER_2
+	PRINT_3:
+		WRITE_DATA '3'
+		SUBI R18, 44
+		RJMP END_OF_FILTER
+
+	FILTER_2:
+		; at this point, if it's still 0001, it must be 2 already
+		CLZ
+		CPI R17, 2
+		BREQ PRINT_2H			; if Z = 1 (equal), print 2
+		CLZ
+		SEC
+		CPI R18, 0b11001000
+		BREQ PRINT_2L
+		BRSH PRINT_2L
+		RJMP FILTER_1
+	PRINT_2H:
+		WRITE_DATA '2'
+		LDI R19, 100
+		ADD R18, R19
+		SUBI R18, 44
+		RJMP END_OF_FILTER
+	PRINT_2L:
+		WRITE_DATA '2'
+		SUBI R18, 200
+		RJMP END_OF_FILTER
+
+	FILTER_1:
+		CLZ
+		SEC
+		CPI R18, 0b01100100
+		BREQ PRINT_1
+		BRSH PRINT_1
+		RJMP END_OF_FILTER
+	PRINT_3:
+		WRITE_DATA '1'
+		SUBI R18, 100
+		RJMP END_OF_FILTER
+
+	END_OF_FILTER:
+	
+		MOV NUM_TO_BE_DIV, R18		; copy value from R18 to NUM_TO_BE_DIV		
+
+		LDI DENOMINATOR, 10						; denominator = 10	
+		CLR QUOTIENT							; quotient = 0	
+		LOOP_10:
+			INC QUOTIENT
+			SUB NUM_TO_BE_DIV, DENOMINATOR		; substraction
+			BRCC LOOP_10						; keep doing it if C = 0 (if the result is still positive)
+		; if the result is negative, stop looping
+		DEC QUOTIENT							; revert last change that make it negative
+		ADD NUM_TO_BE_DIV, DENOMINATOR			; revert last substraction to make it back to positive
+		; So QUOTIENT has the value that we want to print to the LCD, and NUM_TO_BE_DIV is the remainder
+		; we need to do convert it into ASCII character
+		; convert to ASCII by adding 011 to the upper nibble
+		ANDI QUOTIENT, 0x0F						; mask the upper nibble, we only need the lower
+		ORI QUOTIENT, 0x30						; add 0011 to the upper nibble using OR, which is equal to 0x30
+		WRITE_DATA QUOTIENT						; write to LCD
+
+		; we need to do it for another time, but this time we don't need to divide by 10 because it's only single digit
+		ANDI NUM_TO_BE_DIV, 0x0F					; mask the upper nibble, we only need the lower
+		ORI NUM_TO_BE_DIV, 0x30						; add 0011 to the upper nibble using OR, which is equal to 0x30
+		WRITE_DATA NUM_TO_BE_DIV					; write to LCD
+
+	; return all values back from stack to registers
+	POP R19
+	POP R18
+	POP R17
 
 	RET
