@@ -6,6 +6,9 @@
 
 ; NOTE: R16 register is reserved for command and data sending for LCD. Be careful when using this register.
 
+; don't know if this exists!
+.INCLUDE "M328DEF.INC" 
+
 ; --- constant macros ---
 ; LCD takes up PORTA0-7 for 8bit data
 ; LCD takes up PORTB0-2 for RS, R/W, EN
@@ -93,6 +96,19 @@ MAIN:
 	LOADIO TCCR1B, 0b00001000		; don't turn on CS12:10 first
 	LOADIO OCR1AH, HIGH(MAX_COUNT)	; load High bit first before Low bit
 	LOADIO OCR1AL, LOW(MAX_COUNT)	; load OCR1A with 1 second delay
+
+	; setup LED and switches
+	SBI DDRD, 6		; LED on PD6 as output
+	CBI PORTD, 6	; make sure LED is off
+	CBI DDRD, 2		; switch on PD2 as input
+	CBI DDRD, 3		; switch on PD3 as input
+	CBI PORTD, 2
+	CBI PORTD, 3
+
+	; set up input interrupts, but only activate the game reset one. 
+	; Set both interrupts to trigger on a rising edge, since both are pulled low by default.
+	LOADIO EICRA, ((1 << ISC11) | (1 << ISC10) | (1 << ISC01) | (1 << ISC00))
+	LOADIO EIMSK, (1<<INT1)
 
 
 
