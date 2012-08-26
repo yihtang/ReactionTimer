@@ -493,12 +493,12 @@ PRINTRESULT_LCD:
 		; convert to ASCII by adding 011 to the upper nibble
 		ANDI R28, 0x0F							; mask the upper nibble, we only need the lower
 		ORI R28, 0x30							; add 0011 to the upper nibble using OR, which is equal to 0x30
-		WRITE_DATA_R R28							; write to LCD
+		WRITE_DATA_R R28						; write to LCD
 
 		; we need to do it for another time, but this time we don't need to divide by 10 because it's only single digit
 		ANDI R26, 0x0F								; mask the upper nibble, we only need the lower
 		ORI R26, 0x30								; add 0011 to the upper nibble using OR, which is equal to 0x30
-		WRITE_DATA_R R26								; write to LCD
+		WRITE_DATA_R R26							; write to LCD
 
 	; return all values back from stack to registers
 	POP R19
