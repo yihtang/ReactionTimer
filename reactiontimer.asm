@@ -131,7 +131,7 @@ MAIN:
 		LDI GAME_RESULT_H, 0		; reset to 0
 		LDI GAME_RESULT_L, 0		; reset to 0
 		JMP DELAY_2S				; delay for 2s
-		SBI PORTD, 6		; turn on LED on PD6
+		SBI PORTD, 6				; turn on LED on PD6
 		LOADIO TCNT1H, 0			; reset TCNT1 to 0 (always write to high first)
 		LOADIO TCNT1L, 0			; reset TCNT1 to 0
 		LOADIO TIMSK1, (1<<OCIE1A)	; activate timer 1 interrupt
@@ -160,24 +160,56 @@ MAIN:
 		; note: we are dealing with 16bit value, which needs a little bit of trick
 		LDI	R18, 8						; loop for 8 times
 		LOOP_8_TIMES: 
-			CLC							; clear C = 0
+			CLC							; clear C = 0 so 0 will always enter the MSB of GAME_RESULT_H
 			ROR GAME_RESULT_H			; if the LSB of GAME_RESULT_H is 1, C = 1, and ...
 			ROR GAME_RESULT_L			; ... upon next ROR, it will go into the the MSB of GAME_RESULT_L
 			DEC R18
 			BRNE LOOP_8_TIMES			; keep doing it until R18 = 0
-		RJMP INF_LOOP				; go back to the infinite loop
+		JMP INF_LOOP					; go back to the infinite loop
 
 
 ; --- functions body below ---
 
 EXT_INT0_ISR:
-	RETI
+	PUSH R17
+	CALL DELAY_1MS				; delay to solve debouncing button issues
+	CPI GAME_ACTIVE, 2			; check if GAME_ACTIVE = 2
+	BRNE GOBACK_INT0			; if it's not (Z = 0, result not 0), then return immediately
+	IN R17, PIND				; read PIND values into Register
+	SBRS R17, 2					; skip next line if bit #2 is set
+	RJMP GOBACK_INT0			; this line will only be executed when R17 bit #2 is cleared
+	LDI GAME_BUTTON_PRESSED, 1	; register user input and set button as pressed
+	GOBACK_INT0:
+		POP R17
+		RETI
 
 EXT_INT1_ISR:
-	RETI
+	PUSH R17
+	CALL DELAY_1MS				; delay to solve debouncing button issues
+	CPI GAME_ACTIVE, 0			; check if GAME_ACTIVE = 0
+	BRNE GOBACK_INT1			; if it's not (Z = 0, result not 0), then return immediately
+	IN R17, PIND				; read PIND values into Register
+	SBRS R17, 3					; skip next line if bit #3 is set
+	RJMP GOBACK_INT1			; this line will only be executed when R17 bit #3 is cleared
+	LDI GAME_ACTIVE, 1			; set GAME_ACTIVE mode to start LED blinking 
+	GOBACK_INT1:
+		POP R17
+		RETI
 
-TIMER1_COMPA_ISR: 
-	RETI
+TIMER1_COMPA_ISR: 	
+	CPI GAME_ACTIVE, 2			; check if GAME_ACTIVE = 2
+	BRNE GOBACK_COMPA			; if it's not (Z = 0, result not 0), then return immediately
+	LDI GAME_ACTIVE, 0			; game goes back to IDLE mode
+	LDI GAME_RESULT_H, HIGH(999)
+	LDI GAME_RESULT_L, LOW(999)
+
+	; disable interrupts
+	CBI TIMSK1, OCIE1A
+	CBI EIMSK, INT0
+	LOADIO TCCR1B, 0b00001000	; turn off CS12:10 to stop timer counting
+	CBI PORTD, 6				; turn off LED as well
+	GOBACK_COMPA: 
+		RETI
 
 ; --- delay routines for LCD ---
 ; 16 MHz MCU - each tick is 0.0625 us
