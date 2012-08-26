@@ -88,7 +88,11 @@ MAIN:
 	LDI GAME_RESULT_H, HIGH(999)
 	LDI GAME_RESULT_L, LOW(999)
 	
-
+	; setup timer to count from 0 to 15624 which will take 1 sec
+	LOADIO TCCR1A, 0				; WGM13:10 = 0100 CTC mode with OCR1A
+	LOADIO TCCR1B, 0b00001000		; don't turn on CS12:10 first
+	LOADIO OCR1AH, HIGH(MAX_COUNT)	; load High bit first before Low bit
+	LOADIO OCR1AL, LOW(MAX_COUNT)	; load OCR1A with 1 second delay
 
 
 
@@ -128,6 +132,15 @@ DELAY_100US:
 	LOOP100US:	CALL DELAY_1US
 				DEC R17
 				BRNE LOOP100US
+	POP R17
+	RET
+
+DELAY_1MS:
+	PUSH R17
+	LDI R17, 10
+	LOOP1MS:	CALL DELAY_100US
+				DEC R17
+				BRNE LOOP1MS
 	POP R17
 	RET
 
