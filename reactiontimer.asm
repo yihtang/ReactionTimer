@@ -154,11 +154,11 @@ MAIN:
 		; send value of TCNT1 into registers, use IN for from I/O to Register
 		IN GAME_RESULT_H, TCNT1H
 		IN GAME_RESULT_L, TCNT1L
-		; note: TCNT/(MAX_COUNT/1000) = TCNT/15.625.  We can go for divide 2 for 8 times
+		; note: TCNT/(MAX_COUNT/1000) = TCNT/15.625.  We can go for divide 2 for 4 times
 		; not as accurate because TCNT/16 will give some different results
 		; ROR (rotate right) helps to give division by 2. the C flag will set if the LSB is 1
 		; note: we are dealing with 16bit value, which needs a little bit of trick
-		LDI	R18, 8						; loop for 8 times
+		LDI	R18, 4						; loop for 4 times, divide 2^4 = 16
 		LOOP_8_TIMES: 
 			CLC							; clear C = 0 so 0 will always enter the MSB of GAME_RESULT_H
 			ROR GAME_RESULT_H			; if the LSB of GAME_RESULT_H is 1, C = 1, and ...
