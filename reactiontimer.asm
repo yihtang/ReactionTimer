@@ -8,30 +8,30 @@
 ; NOTE: Due to the limitations of Assembly, this program can only work with ATmega328 with 16MHz clock speed
 
 ; don't know if this exists!
-.INCLUDE "M328DEF.INC" 
+; .INCLUDE <M328DEF.INC>
+
+; -- reserved register ---
+; GAME_ACTIVE = R22
+; GAME_BUTTON_PRESSED = R23
+; GAME_RESULT_H = R24
+; GAME_RESULT_L = R25
+; NUM_TO_BE_DIV = R26
+; DENOMINATOR = R27
+; QUOTIENT = R28
 
 ; --- constant macros ---
 ; LCD takes up PORTA0-7 for 8bit data
 ; LCD takes up PORTB0-2 for RS, R/W, EN
 
-.EQU LCD_DataPort = PORTA
-.EQU LCD_DataDDR = DDRA
-.EQU LCD_DataPIN = PINA
+.EQU LCD_DataPort = PORTC
+.EQU LCD_DataDDR = DDRC
+.EQU LCD_DataPIN = PINC
 .EQU LCD_CmdPort = PORTB
 .EQU LCD_CmdDDR = DDRB
 .EQU LCD_CmdPIN = PINB
 .EQU LCD_RS = 0		; define shift for Register Select
 .EQU LCD_RW = 1		; define shift for Read/Write
 .EQU LCD_EN = 2		; define shift for Enable bit
-
-.DEF GAME_ACTIVE = R22
-.DEF GAME_BUTTON_PRESSED = R23
-.DEF GAME_RESULT_H = R24
-.DEF GAME_RESULT_L = R25
-
-.DEF NUM_TO_BE_DIV = R26
-.DEF DENOMINATOR = R27
-.DEF QUOTIENT = R28
 
 .EQU F_CPU = 16000000
 .EQU PRESCALE = 1024
@@ -46,6 +46,11 @@
 
 ; macro: simplifies the data writing to LCD.
 .MACRO WRITE_DATA
+	LDI R16, @0
+	CALL LCD_WRITE_DATA
+.ENDMACRO
+
+.MACRO WRITE_DATA_R
 	MOV R16, @0
 	CALL LCD_WRITE_DATA
 .ENDMACRO
@@ -53,7 +58,7 @@
 ; macro: simplifies to load I/O process, using R18 as temporary register
 .MACRO LOADIO
 	LDI R18, @1
-	OUT @0, R18
+	STS @0, R18
 .ENDMACRO
 
 ; --- Interrupt jump ---
@@ -91,10 +96,10 @@ MAIN:
 
 	CLI						; clear interrupts
 	; setup the game
-	LDI GAME_ACTIVE, 0
-	LDI GAME_BUTTON_PRESSED, 0
-	LDI GAME_RESULT_H, HIGH(999)
-	LDI GAME_RESULT_L, LOW(999)
+	LDI R22, 0
+	LDI R23, 0
+	LDI R24, HIGH(999)
+	LDI R25, LOW(999)
 	
 	; setup timer to count from 0 to 15624 which will take 1 sec
 	LOADIO TCCR1A, 0				; WGM13:10 = 0100 CTC mode with OCR1A
@@ -121,10 +126,10 @@ MAIN:
 
 		JMP PRINTRESULT_LCD				; print result to LCD
 		
-		SUBI GAME_ACTIVE, 1			; if GAME_ACTIVE - 1 = 0, Z = 1
+		SUBI R22, 1					; if GAME_ACTIVE - 1 = 0, Z = 1
 		BREQ STARTGAME				; Branch if Z = 1 - note: short jump, must be within 64bytes of PC
 
-		SUBI GAME_ACTIVE, 2			; if GAME_ACTIVE - 2 = 0, Z = 1
+		SUBI R22, 2					; if GAME_ACTIVE - 2 = 0, Z = 1
 		BREQ CHECK_BUTTON_PRESSED	; Branch to check if GAME_BUTTON_PRESSED = 1
 		
 	RJMP INF_LOOP
@@ -132,8 +137,8 @@ MAIN:
 	; --- game states ---
 
 	STARTGAME:
-		LDI GAME_RESULT_H, 0		; reset to 0
-		LDI GAME_RESULT_L, 0		; reset to 0
+		LDI R24, 0					; reset to 0
+		LDI R25, 0					; reset to 0
 		JMP DELAY_2S				; delay for 2s
 		SBI PORTD, 6				; turn on LED on PD6
 		LOADIO TCNT1H, 0			; reset TCNT1 to 0 (always write to high first)
@@ -142,22 +147,22 @@ MAIN:
 		LOADIO TCCR1B, ((1<<CS10) | (1<<CS12))	; start timer to prescaler of 1024
 		LOADIO EIFR, ((1<<INTF1) | (INTF0))		; clear interrupt flag by writing 1 to it
 		LOADIO EIMSK, (1<<INT0)		; activate game button interrupt
-		LDI GAME_ACTIVE, 2			; set game_state into 2
+		LDI R22, 2					; set game_state into 2
 		RJMP INF_LOOP				; go back to the infinite loop
 
 	CHECK_BUTTON_PRESSED:			; routine to check if button is pressed
-		SUBI GAME_BUTTON_PRESSED, 1	; if GAME_BUTTON_PRESSED - 1 = 0, Z = 1
+		SUBI R23, 1					; if GAME_BUTTON_PRESSED - 1 = 0, Z = 1
 		BREQ STOPGAME				; Branch to STOPGAME if button is pressed
 		RJMP INF_LOOP				; go back to the infinite loop
 
 	STOPGAME:
-		CBI TIMSK1, OCIE1A			; clear interrupt for Timer1 Output CompA match
+		LOADIO TIMSK1, (1<<OCIE1A)	; clear interrupt for Timer1 Output CompA match
 		CBI EIMSK, INT0				; clear interrupt for external button interrupt
 		LOADIO TCCR1B, 0b00001000	; turn off CS12:10 to stop timer counting
 		CBI PORTD, 6				; turn off LED
 		; send value of TCNT1 into registers, use IN for from I/O to Register
-		IN GAME_RESULT_H, TCNT1H
-		IN GAME_RESULT_L, TCNT1L
+		LDS R24, TCNT1H
+		LDS R25, TCNT1L
 		; note: TCNT/(MAX_COUNT/1000) = TCNT/15.625.  We can go for divide 2 for 4 times
 		; not as accurate because TCNT/16 will give some different results
 		; ROR (rotate right) helps to give division by 2. the C flag will set if the LSB is 1
@@ -165,8 +170,8 @@ MAIN:
 		LDI	R18, 4						; loop for 4 times, divide 2^4 = 16
 		LOOP_8_TIMES: 
 			CLC							; clear C = 0 so 0 will always enter the MSB of GAME_RESULT_H
-			ROR GAME_RESULT_H			; if the LSB of GAME_RESULT_H is 1, C = 1, and ...
-			ROR GAME_RESULT_L			; ... upon next ROR, it will go into the the MSB of GAME_RESULT_L
+			ROR R24						; if the LSB of GAME_RESULT_H is 1, C = 1, and ...
+			ROR R25						; ... upon next ROR, it will go into the the MSB of GAME_RESULT_L
 			DEC R18
 			BRNE LOOP_8_TIMES			; keep doing it until R18 = 0
 		JMP INF_LOOP					; go back to the infinite loop
@@ -177,12 +182,12 @@ MAIN:
 EXT_INT0_ISR:
 	PUSH R17
 	CALL DELAY_1MS				; delay to solve debouncing button issues
-	CPI GAME_ACTIVE, 2			; check if GAME_ACTIVE = 2
+	CPI R22, 2					; check if GAME_ACTIVE = 2
 	BRNE GOBACK_INT0			; if it's not (Z = 0, result not 0), then return immediately
 	IN R17, PIND				; read PIND values into Register
 	SBRS R17, 2					; skip next line if bit #2 is set
 	RJMP GOBACK_INT0			; this line will only be executed when R17 bit #2 is cleared
-	LDI GAME_BUTTON_PRESSED, 1	; register user input and set button as pressed
+	LDI R23, 1					; register user input and set button as pressed
 	GOBACK_INT0:
 		POP R17
 		RETI
@@ -190,25 +195,25 @@ EXT_INT0_ISR:
 EXT_INT1_ISR:
 	PUSH R17
 	CALL DELAY_1MS				; delay to solve debouncing button issues
-	CPI GAME_ACTIVE, 0			; check if GAME_ACTIVE = 0
+	CPI R22, 0					; check if GAME_ACTIVE = 0
 	BRNE GOBACK_INT1			; if it's not (Z = 0, result not 0), then return immediately
 	IN R17, PIND				; read PIND values into Register
 	SBRS R17, 3					; skip next line if bit #3 is set
 	RJMP GOBACK_INT1			; this line will only be executed when R17 bit #3 is cleared
-	LDI GAME_ACTIVE, 1			; set GAME_ACTIVE mode to start LED blinking 
+	LDI R22, 1					; set GAME_ACTIVE mode to start LED blinking 
 	GOBACK_INT1:
 		POP R17
 		RETI
 
 TIMER1_COMPA_ISR: 	
-	CPI GAME_ACTIVE, 2			; check if GAME_ACTIVE = 2
+	CPI R22, 2					; check if GAME_ACTIVE = 2
 	BRNE GOBACK_COMPA			; if it's not (Z = 0, result not 0), then return immediately
-	LDI GAME_ACTIVE, 0			; game goes back to IDLE mode
-	LDI GAME_RESULT_H, HIGH(999)
-	LDI GAME_RESULT_L, LOW(999)
+	LDI R22, 0					; game goes back to IDLE mode
+	LDI R24, HIGH(999)
+	LDI R25, LOW(999)
 
 	; disable interrupts
-	CBI TIMSK1, OCIE1A
+	LOADIO TIMSK1, (1<<OCIE1A)
 	CBI EIMSK, INT0
 	LOADIO TCCR1B, 0b00001000	; turn off CS12:10 to stop timer counting
 	CBI PORTD, 6				; turn off LED as well
@@ -319,8 +324,8 @@ PRINTRESULT_LCD:
 	; 300: 0001 0010 1100
 	; 200: 0000 1100 1000
 	; 100: 0000 0110 0100
-	MOV R17, GAME_RESULT_H
-	MOV R18, GAME_RESULT_L
+	MOV R17, R24
+	MOV R18, R25
 
 	FILTER_9:
 		; check for 0011 on H first
@@ -472,28 +477,28 @@ PRINTRESULT_LCD:
 
 	END_OF_FILTER:
 	
-		MOV NUM_TO_BE_DIV, R18		; copy value from R18 to NUM_TO_BE_DIV		
+		MOV R26, R18							; copy value from R18 to NUM_TO_BE_DIV		
 
-		LDI DENOMINATOR, 10						; denominator = 10	
-		CLR QUOTIENT							; quotient = 0	
+		LDI R27, 10								; denominator = 10	
+		CLR R28									; quotient = 0	
 		LOOP_10:
-			INC QUOTIENT
-			SUB NUM_TO_BE_DIV, DENOMINATOR		; substraction
+			INC R28
+			SUB R26, R27						; substraction
 			BRCC LOOP_10						; keep doing it if C = 0 (if the result is still positive)
 		; if the result is negative, stop looping
-		DEC QUOTIENT							; revert last change that make it negative
-		ADD NUM_TO_BE_DIV, DENOMINATOR			; revert last substraction to make it back to positive
+		DEC R28									; revert last change that make it negative
+		ADD R26, R27							; revert last substraction to make it back to positive
 		; So QUOTIENT has the value that we want to print to the LCD, and NUM_TO_BE_DIV is the remainder
 		; we need to do convert it into ASCII character
 		; convert to ASCII by adding 011 to the upper nibble
-		ANDI QUOTIENT, 0x0F						; mask the upper nibble, we only need the lower
-		ORI QUOTIENT, 0x30						; add 0011 to the upper nibble using OR, which is equal to 0x30
-		WRITE_DATA QUOTIENT						; write to LCD
+		ANDI R28, 0x0F							; mask the upper nibble, we only need the lower
+		ORI R28, 0x30							; add 0011 to the upper nibble using OR, which is equal to 0x30
+		WRITE_DATA_R R28							; write to LCD
 
 		; we need to do it for another time, but this time we don't need to divide by 10 because it's only single digit
-		ANDI NUM_TO_BE_DIV, 0x0F					; mask the upper nibble, we only need the lower
-		ORI NUM_TO_BE_DIV, 0x30						; add 0011 to the upper nibble using OR, which is equal to 0x30
-		WRITE_DATA NUM_TO_BE_DIV					; write to LCD
+		ANDI R26, 0x0F								; mask the upper nibble, we only need the lower
+		ORI R26, 0x30								; add 0011 to the upper nibble using OR, which is equal to 0x30
+		WRITE_DATA_R R26								; write to LCD
 
 	; return all values back from stack to registers
 	POP R19
