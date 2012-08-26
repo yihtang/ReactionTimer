@@ -5,6 +5,7 @@
 ; Date: 26 August 2012
 
 ; NOTE: R16 register is reserved for command and data sending for LCD. Be careful when using this register.
+; NOTE: Due to the limitations of Assembly, this program can only work with ATmega328 with 16MHz clock speed
 
 ; don't know if this exists!
 .INCLUDE "M328DEF.INC" 
@@ -110,7 +111,61 @@ MAIN:
 	LOADIO EICRA, ((1 << ISC11) | (1 << ISC10) | (1 << ISC01) | (1 << ISC00))
 	LOADIO EIMSK, (1<<INT1)
 
+	SEI				; set global interrupt
 
+	INF_LOOP:		; loop forever
+
+		JMP PRINTRESULT_LCD				; print result to LCD
+		
+		SUBI GAME_ACTIVE, 1			; if GAME_ACTIVE - 1 = 0, Z = 1
+		BREQ STARTGAME				; Branch if Z = 1 - note: short jump, must be within 64bytes of PC
+
+		SUBI GAME_ACTIVE, 2			; if GAME_ACTIVE - 2 = 0, Z = 1
+		BREQ CHECK_BUTTON_PRESSED	; Branch to check if GAME_BUTTON_PRESSED = 1
+		
+	RJMP INF_LOOP
+
+	; --- game states ---
+
+	STARTGAME:
+		LDI GAME_RESULT_H, 0		; reset to 0
+		LDI GAME_RESULT_L, 0		; reset to 0
+		JMP DELAY_2S				; delay for 2s
+		SBI PORTD, 6		; turn on LED on PD6
+		LOADIO TCNT1H, 0			; reset TCNT1 to 0 (always write to high first)
+		LOADIO TCNT1L, 0			; reset TCNT1 to 0
+		LOADIO TIMSK1, (1<<OCIE1A)	; activate timer 1 interrupt
+		LOADIO TCCR1B, ((1<<CS10) | (1<<CS12))	; start timer to prescaler of 1024
+		LOADIO EIFR, ((1<<INTF1) | (INTF0))		; clear interrupt flag by writing 1 to it
+		LOADIO EIMSK, (1<<INT0)		; activate game button interrupt
+		LDI GAME_ACTIVE, 2			; set game_state into 2
+		RJMP INF_LOOP				; go back to the infinite loop
+
+	CHECK_BUTTON_PRESSED:			; routine to check if button is pressed
+		SUBI GAME_BUTTON_PRESSED, 1	; if GAME_BUTTON_PRESSED - 1 = 0, Z = 1
+		BREQ STOPGAME				; Branch to STOPGAME if button is pressed
+		RJMP INF_LOOP				; go back to the infinite loop
+
+	STOPGAME:
+		CBI TIMSK1, OCIE1A			; clear interrupt for Timer1 Output CompA match
+		CBI EIMSK, INT0				; clear interrupt for external button interrupt
+		LOADIO TCCR1B, 0b00001000	; turn off CS12:10 to stop timer counting
+		CBI PORTD, 6				; turn off LED
+		; send value of TCNT1 into registers, use IN for from I/O to Register
+		IN GAME_RESULT_H, TCNT1H
+		IN GAME_RESULT_L, TCNT1L
+		; note: TCNT/(MAX_COUNT/1000) = TCNT/15.625.  We can go for divide 2 for 8 times
+		; not as accurate because TCNT/16 will give some different results
+		; ROR (rotate right) helps to give division by 2. the C flag will set if the LSB is 1
+		; note: we are dealing with 16bit value, which needs a little bit of trick
+		LDI	R18, 8						; loop for 8 times
+		LOOP_8_TIMES: 
+			CLC							; clear C = 0
+			ROR GAME_RESULT_H			; if the LSB of GAME_RESULT_H is 1, C = 1, and ...
+			ROR GAME_RESULT_L			; ... upon next ROR, it will go into the the MSB of GAME_RESULT_L
+			DEC R18
+			BRNE LOOP_8_TIMES			; keep doing it until R18 = 0
+		RJMP INF_LOOP				; go back to the infinite loop
 
 
 ; --- functions body below ---
@@ -126,6 +181,8 @@ TIMER1_COMPA_ISR:
 
 ; --- delay routines for LCD ---
 ; 16 MHz MCU - each tick is 0.0625 us
+; note: these delays aren't exact, there are overhead and stuffs that are not included in calculations
+;		but it serves the purpose of waiting for a certain time as a delay
 
 DELAY_1US:
 	PUSH R17
@@ -169,6 +226,22 @@ DELAY_2MS:
 	POP R17
 	RET
 
+DELAY_2S:
+	PUSH R17
+	PUSH R18
+	LDI R17, 100			; outer loop, repeat 100 times
+	LOOP2S_OUT:		
+		LDI R18, 10			; inner loop, repeat 10 times
+		LOOP2S_IN:
+			CALL DELAY_2MS
+			DEC R18
+			BRNE LOOP2S_IN
+		DEC R17
+		BRNE LOOP2S_OUT
+	POP R18					; Note: Stack - Last in first out
+	POP R17
+	RET
+
 ; --- LCD routines ---
 
 LCD_WRITE_CMD:
@@ -189,4 +262,8 @@ LCD_WRITE_DATA:
 	CALL DELAY_1US
 	CBI LCD_CmdPort, LCD_EN		; EN = 1 to generate low pulse
 	CALL DELAY_100US
+	RET
+
+PRINTRESULT_LCD:
+
 	RET
