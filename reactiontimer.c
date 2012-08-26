@@ -88,7 +88,7 @@ int main(void)
 
 			// calculate the time passed since the beginning of the game
             // note the 2 ms offset, added due to the 2 ms debouncing wait in the INT0 ISR
-			last_game_count = (TCNT1 - DEBOUNCE_DELAY_MS) / (MAX_COUNT/1000);
+			last_game_count = (TCNT1) / (MAX_COUNT/1000)  - DEBOUNCE_DELAY_MS;
 
 			/* now the game is over, so reset the game state and stop interrupts */
 			game_button_pressed = 0;
@@ -124,7 +124,7 @@ void setup(){
 	OCR1A = (unsigned short) MAX_COUNT;
 
     // set up the led
-	DDRD |= DDD6;
+	DDRD |= (1<<DDD6);
 	PORTD &= ~(1 << PORTD6);
 
 	// set up the switch inputs
